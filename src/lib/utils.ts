@@ -35,9 +35,16 @@ export function processImageUrl(originalUrl: string): string {
   if (!originalUrl) return originalUrl;
 
   const proxyUrl = getImageProxyUrl();
-  if (!proxyUrl) return originalUrl;
+  if (proxyUrl) {
+    return `${proxyUrl}${encodeURIComponent(originalUrl)}`;
+  }
 
-  return `${proxyUrl}${encodeURIComponent(originalUrl)}`;
+  // 豆瓣图片默认走 img3.doubanio.com 主域名，规避 img1/2/9 在部分网络下被墙/限流导致封面不显示
+  if (originalUrl.includes('doubanio.com')) {
+    return originalUrl.replace(/img\d+\.doubanio\.com/g, 'img3.doubanio.com');
+  }
+
+  return originalUrl;
 }
 
 /**
