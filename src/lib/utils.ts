@@ -39,9 +39,10 @@ export function processImageUrl(originalUrl: string): string {
     return `${proxyUrl}${encodeURIComponent(originalUrl)}`;
   }
 
-  // 豆瓣图片默认走 img3.doubanio.com 主域名，规避 img1/2/9 在部分网络下被墙/限流导致封面不显示
+  // 豆瓣图片走本站 /api/image-proxy 服务端代理：豆瓣图床对浏览器直连返回 418 防盗链，
+  // 代理端带 Referer + 浏览器 UA 抓取可正常返回，且边缘缓存半年
   if (originalUrl.includes('doubanio.com')) {
-    return originalUrl.replace(/img\d+\.doubanio\.com/g, 'img3.doubanio.com');
+    return `/api/image-proxy?url=${encodeURIComponent(originalUrl)}`;
   }
 
   return originalUrl;
