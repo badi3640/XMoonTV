@@ -616,6 +616,29 @@ function PlayPageClient() {
         setSourceSearchLoading(false);
       }
     };
+    // 标题归一化：去空白与常见标点（·：｜等豆瓣/源站标题差异），再小写比较
+    const normalizeTitle = (s: string): string =>
+      s
+        .replace(/\s+/g, '')
+        .toLowerCase()
+        .replace(
+          /[·・:：|｜/／,，.。!！?？''""「」『』【】[\]()（）~～\-—_+*&#@]/g,
+          ''
+        );
+
+    const titleMatches = (a: string, b: string): boolean => {
+      const na = normalizeTitle(a);
+      const nb = normalizeTitle(b);
+      if (!na || !nb) return false;
+      return na === nb || na.includes(nb) || nb.includes(na);
+    };
+
+    const matchStype = (result: SearchResult): boolean =>
+      searchType
+        ? (searchType === 'tv' && result.episodes.length > 1) ||
+          (searchType === 'movie' && result.episodes.length === 1)
+        : true;
+
     const fetchSourcesData = async (query: string): Promise<SearchResult[]> => {
       // 根据搜索词获取全部源信息
       try {
@@ -626,20 +649,42 @@ function PlayPageClient() {
           throw new Error('搜索失败');
         }
         const data = await response.json();
+        const raw: SearchResult[] = data.results || [];
 
-        // 处理搜索结果，根据规则过滤
-        const results = data.results.filter(
+        // 三级匹配，逐级放宽，避免豆瓣标题与采集站标题的细微差异导致"未找到匹配结果"：
+        // 1) 精确标题（去空格全等）+ 年份 + 类型
+        let results = raw.filter(
           (result: SearchResult) =>
             result.title.replaceAll(' ', '').toLowerCase() ===
               videoTitleRef.current.replaceAll(' ', '').toLowerCase() &&
             (videoYearRef.current
               ? result.year.toLowerCase() === videoYearRef.current.toLowerCase()
               : true) &&
-            (searchType
-              ? (searchType === 'tv' && result.episodes.length > 1) ||
-                (searchType === 'movie' && result.episodes.length === 1)
-              : true)
+            matchStype(result)
         );
+
+        // 2) 模糊标题（归一化后互相包含）+ 类型，年份一致者优先
+        if (results.length === 0) {
+          results = raw
+            .filter(
+              (result: SearchResult) =>
+                titleMatches(result.title, videoTitleRef.current) &&
+                matchStype(result)
+            )
+            .sort(
+              (a: SearchResult, b: SearchResult) =>
+                (b.year === videoYearRef.current ? 1 : 0) -
+                (a.year === videoYearRef.current ? 1 : 0)
+            );
+        }
+
+        // 3) 兜底：仅模糊标题（容忍年份不符、电影被拆成多集等类型差异）
+        if (results.length === 0) {
+          results = raw.filter((result: SearchResult) =>
+            titleMatches(result.title, videoTitleRef.current)
+          );
+        }
+
         setAvailableSources(results);
         return results;
       } catch (err) {
